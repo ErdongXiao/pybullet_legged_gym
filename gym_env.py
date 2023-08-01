@@ -16,7 +16,7 @@ import pybullet_data
 from collections import namedtuple
 from attrdict import AttrDict
 
-ROBOT_URDF_PATH = "./aliengo_description/urdf/aliengo.urdf"
+ROBOT_URDF_PATH = "./arcdog_description/urdf/arcdog_.urdf"
 
 # x,y,z distance
 def goal_distance(goal_a, goal_b):
@@ -32,7 +32,7 @@ class AliengoGymEnv(gym.Env):
     def __init__(self,
                  camera_attached=False,
                  # useIK=True,
-                 actionRepeat=1,
+                 actionRepeat=3,
                  renders=False,
                  maxSteps=100,
                  # numControlledJoints=3, # XYZ, we use IK here!
@@ -58,18 +58,20 @@ class AliengoGymEnv(gym.Env):
         
         # setup quadruped robot:
         self.end_effector_index = 0
-        # self.table = pybullet.loadURDF(TABLE_URDF_PATH, [0.5, 0, -0.6300], [0, 0, 0, 1])
         flags = pybullet.URDF_USE_SELF_COLLISION
         self.aliengo = pybullet.loadURDF(ROBOT_URDF_PATH, [0, 0, 0.5], [0, 0, 0, 1], flags=flags,useFixedBase=1)
         self.num_joints = pybullet.getNumJoints(self.aliengo)
-        self.control_joints = ["FR_hip_joint", "FR_thigh_joint", "FR_calf_joint", 
-                               "FL_hip_joint", "FL_thigh_joint", "FL_calf_joint",
-                               "RR_hip_joint", "RR_thigh_joint", "RR_calf_joint",
-                               "RL_hip_joint", "RL_thigh_joint", "RL_calf_joint"]
+        self.control_joints = ["FR_hip_joint", "FR_thigh_joint", "FR_calf_joint", "FR_foot_pris",
+                               "FL_hip_joint", "FL_thigh_joint", "FL_calf_joint", "FL_foot_pris",
+                               "RR_hip_joint", "RR_thigh_joint", "RR_calf_joint", "RR_foot_pris",
+                               "RL_hip_joint", "RL_thigh_joint", "RL_calf_joint", "RL_foot_pris"]
         self.joint_type_list = ["REVOLUTE", "PRISMATIC", "SPHERICAL", "PLANAR", "FIXED"]
         self.joint_info = namedtuple("jointInfo", ["id", "name", "type", "lowerLimit", "upperLimit", "maxForce", "maxVelocity", "controllable"])
         self.joints = AttrDict()
-
+        self.joint_angles = (0.0, 0.6, -1.2, 0.0,
+                             0.0, 0.6, -1.2, 0.0,
+                             0.0, 0.6, -1.2, 0.0,
+                             0.0, 0.6, -1.2, 0.0) # pi/2 = 1.5707
         for i in range(self.num_joints):
             info = pybullet.getJointInfo(self.aliengo, i)
             jointID = info[0]
@@ -81,7 +83,7 @@ class AliengoGymEnv(gym.Env):
             jointMaxVelocity = info[11]
             controllable = True if jointName in self.control_joints else False
             info = self.joint_info(jointID, jointName, jointType, jointLowerLimit, jointUpperLimit, jointMaxForce, jointMaxVelocity, controllable)
-            if info.type == "REVOLUTE":
+            if info.type == "REVOLUTE" or info.type == "PRISMATIC":
                 pybullet.setJointMotorControl2(self.aliengo, info.id, pybullet.VELOCITY_CONTROL, targetVelocity=0, force=0)
             self.joints[info.name] = info
 
@@ -92,7 +94,7 @@ class AliengoGymEnv(gym.Env):
 
         self.name = 'AliengoGymEnv'
         # self.simulatedGripper = simulatedGripper
-        self.action_dim = 12
+        self.action_dim = 16
         self.stepCounter = 0
         self.maxSteps = maxSteps
         self.terminated = False
@@ -130,7 +132,7 @@ class AliengoGymEnv(gym.Env):
         )
 
     def get_joint_angles(self):
-        j = pybullet.getJointStates(self.aliengo, [1,2,3,4,5,6,7,8,9,10,11,12])
+        j = pybullet.getJointStates(self.aliengo, [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16])
         joints = [i[0] for i in j]
 
         return joints
@@ -180,11 +182,11 @@ class AliengoGymEnv(gym.Env):
         # pybullet.resetBasePositionAndOrientation(self.obj, self.initial_obj_pos, [0.,0.,0.,1.0]) # reset object pos
 
         # reset robot simulation and position:
-        joint_angles = (0.0, 0.6, -1.2, 
-                        0.0, 0.6, -1.2,
-                        0.0, 0.6, -1.2,
-                        0.0, 0.6, -1.2) # pi/2 = 1.5707
-        self.set_joint_angles(joint_angles)
+        self.joint_angles = (0.0, 0.6, -1.2, 0.0,
+                             0.0, 0.6, -1.2, 0.0,
+                             0.0, 0.6, -1.2, 0.0,
+                             0.0, 0.6, -1.2, 0.0) # pi/2 = 1.5707
+        self.set_joint_angles(self.joint_angles)
 
         # step simualator:
         for i in range(100):
@@ -197,7 +199,8 @@ class AliengoGymEnv(gym.Env):
     
     def step(self, action):
         action = np.array(action)
-        quad_action = 0.1 * action[0:self.action_dim].astype(float)
+        # quad_action = 0.025 * np.array(list(action)+list(action)[4:8]+list(action)[0:4]).astype(float)
+        # quad_action = 0.01 * action[0:self.action_dim].astype(float)
         # arm_action = 0.1 * action[0:self.action_dim-1].astype(float) # dX, dY, dZ - range: [-1,1]
         # gripper_action = action[self.action_dim-1].astype(float) # gripper - range: [-1=closed,1=open]
 
@@ -207,8 +210,9 @@ class AliengoGymEnv(gym.Env):
         # new_p = np.array(cur_p[0]) + arm_action
         # actuate: 
         # joint_angles = self.calculate_ik(new_p, self.aliengo_orn) # XYZ and angles set to zero
+        # self.joint_angles+=quad_action
         self.set_joint_angles(action)
-        
+        print(self.get_joint_angles())        
         # step simualator:
         for i in range(self.actionRepeat):
             pybullet.stepSimulation()
@@ -233,7 +237,7 @@ class AliengoGymEnv(gym.Env):
         # js = self.get_joint_angles()
 
         tool_pos = self.get_current_pose()[0] # XYZ, no angles
-        self.obj_pos,_ = pybullet.getBasePositionAndOrientation(self.aliengo)
+        self.obj_pos, self.obj_orn = pybullet.getBasePositionAndOrientation(self.aliengo)
         self.obj_pos = (2.0,0,0)
         objects_pos = self.obj_pos       
         goal_pos = self.obj_pos

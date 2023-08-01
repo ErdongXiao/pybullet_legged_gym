@@ -52,14 +52,14 @@ args.data_size = obs.shape[0]
 
 def main():
     
-    positions = [[0.0, 0.6, -1.2, 
-                  0.0, 0.6, -1.2,
-                  0.0, 0.6, -1.2,
-                  0.0, 0.6, -1.2],
-                 [0.0, 0.0, 0.0, 
-                  0.0, 0.0, 0.0,
-                  0.0, 0.0, 0.0,
-                  0.0, 0.0, 0.0]]
+    positions = [[0.0, 0.6, -1.2, 0.0,
+                  0.0, 0.6, -1.2, 0.0,
+                  0.0, 0.6, -1.2, 0.0,
+                  0.0, 0.6, -1.2, 0.0],
+                 [0.0, 0.0, 0.0, 0.03, 
+                  0.0, 0.0, 0.0, 0.03,
+                  0.0, 0.0, 0.0, 0.03,
+                  0.0, 0.0, 0.0, 0.03]]
     
     state = env.reset()
     ep_reward = 0
@@ -67,7 +67,8 @@ def main():
     for i in range(100):
         for t in range(1, args.mel):
 
-            p = int(t/61)
+            p = int(t/60)
+            # p = 1
             action = positions[p]
             state, reward, env_done, info = env.step(action)  
         
