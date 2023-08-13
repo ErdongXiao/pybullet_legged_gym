@@ -16,12 +16,12 @@ import pybullet_data
 from collections import namedtuple
 from attrdict import AttrDict
 
-ROBOT_URDF_PATH = "./arcdog_description/urdf/arcdog_.urdf"
+ROBOT_URDF_PATH = "./aliengo_description/urdf/aliengo.urdf"
 
 # x,y,z distance
 def goal_distance(goal_a, goal_b):
     assert goal_a.shape == goal_b.shape
-    return np.linalg.norm(goal_a - goal_b, axis=-1)
+    return np.linalg.norm(np.array([1.25,0.5,0.5,0.25])*(goal_a - goal_b), axis=-1)
 
 # x,y distance
 def goal_distance2d(goal_a, goal_b):
@@ -55,23 +55,30 @@ class AliengoGymEnv(gym.Env):
         pybullet.setRealTimeSimulation(False)
         # pybullet.configureDebugVisualizer(pybullet.COV_ENABLE_WIREFRAME,1)
         pybullet.resetDebugVisualizerCamera(cameraDistance=1.5, cameraYaw=60, cameraPitch=-30, cameraTargetPosition=[0,0,0])
-        
+        pybullet.setPhysicsEngineParameter(enableConeFriction=5000)
+        pybullet.setPhysicsEngineParameter(numSolverIterations=30)
         # setup quadruped robot:
         self.end_effector_index = 0
         flags = pybullet.URDF_USE_SELF_COLLISION
-        self.aliengo = pybullet.loadURDF(ROBOT_URDF_PATH, [0, 0, 0.5], [0, 0, 0, 1], flags=flags,useFixedBase=1)
+        self.aliengo = pybullet.loadURDF(ROBOT_URDF_PATH, [0, 0, 0.5], [0, 0, 0, 1], flags=flags,useFixedBase=0)
         self.num_joints = pybullet.getNumJoints(self.aliengo)
-        self.control_joints = ["FR_hip_joint", "FR_thigh_joint", "FR_calf_joint", "FR_foot_pris",
-                               "FL_hip_joint", "FL_thigh_joint", "FL_calf_joint", "FL_foot_pris",
-                               "RR_hip_joint", "RR_thigh_joint", "RR_calf_joint", "RR_foot_pris",
-                               "RL_hip_joint", "RL_thigh_joint", "RL_calf_joint", "RL_foot_pris"]
+        self.control_joints = ["FR_hip_joint", "FR_thigh_joint", "FR_calf_joint",
+                               "FL_hip_joint", "FL_thigh_joint", "FL_calf_joint",
+                               "RR_hip_joint", "RR_thigh_joint", "RR_calf_joint",
+                               "RL_hip_joint", "RL_thigh_joint", "RL_calf_joint"]
         self.joint_type_list = ["REVOLUTE", "PRISMATIC", "SPHERICAL", "PLANAR", "FIXED"]
         self.joint_info = namedtuple("jointInfo", ["id", "name", "type", "lowerLimit", "upperLimit", "maxForce", "maxVelocity", "controllable"])
         self.joints = AttrDict()
-        self.joint_angles = (0.0, 0.6, -1.2, 0.0,
-                             0.0, 0.6, -1.2, 0.0,
-                             0.0, 0.6, -1.2, 0.0,
-                             0.0, 0.6, -1.2, 0.0) # pi/2 = 1.5707
+        self.joint_angles = [-0.1, 0.9, -1.7,
+                             0.1, 0.9, -1.7,
+                             -0.1, 0.9, -1.7,
+                             0.1, 0.9, -1.7]
+
+        # self.joint_angles = [-0.1, 0.8, -1.0,
+        #           0.1, 0.4, -1.6,
+        #           0.1, 0.4, -1.6,
+        #           -0.1, 0.8, -1.0]
+        self.quad_action = np.array([0.0]*12)
         for i in range(self.num_joints):
             info = pybullet.getJointInfo(self.aliengo, i)
             jointID = info[0]
@@ -94,7 +101,7 @@ class AliengoGymEnv(gym.Env):
 
         self.name = 'AliengoGymEnv'
         # self.simulatedGripper = simulatedGripper
-        self.action_dim = 16
+        self.action_dim = 6
         self.stepCounter = 0
         self.maxSteps = maxSteps
         self.terminated = False
@@ -182,10 +189,8 @@ class AliengoGymEnv(gym.Env):
         # pybullet.resetBasePositionAndOrientation(self.obj, self.initial_obj_pos, [0.,0.,0.,1.0]) # reset object pos
 
         # reset robot simulation and position:
-        self.joint_angles = (0.0, 0.6, -1.2, 0.0,
-                             0.0, 0.6, -1.2, 0.0,
-                             0.0, 0.6, -1.2, 0.0,
-                             0.0, 0.6, -1.2, 0.0) # pi/2 = 1.5707
+        pybullet.resetBasePositionAndOrientation(self.aliengo, [0, 0, 0.5], [0, 0, 0, 1])
+        pybullet.resetBaseVelocity(self.aliengo, [0.0, 0, 0.], [0, 0, 0])
         self.set_joint_angles(self.joint_angles)
 
         # step simualator:
@@ -198,9 +203,9 @@ class AliengoGymEnv(gym.Env):
     
     
     def step(self, action):
-        action = np.array(action)
-        # quad_action = 0.025 * np.array(list(action)+list(action)[4:8]+list(action)[0:4]).astype(float)
-        # quad_action = 0.01 * action[0:self.action_dim].astype(float)
+        action = np.concatenate((np.array(action)[0:3]*np.array([0.01, 0.6, 1.2]), np.array(action)[3:6]*np.array([0.01, 0.6, 1.2]), np.array(action)[3:6]*np.array([0.01, 0.6, 1.2]), np.array(action)[0:3]*np.array([0.01, 0.6, 1.2])))
+        # quad_action = 0.025 * np.array(list(action)+list(action)[3:6]+list(action)[0:3]).astype(float)
+        self.quad_action = 0.22 * action.astype(float)
         # arm_action = 0.1 * action[0:self.action_dim-1].astype(float) # dX, dY, dZ - range: [-1,1]
         # gripper_action = action[self.action_dim-1].astype(float) # gripper - range: [-1=closed,1=open]
 
@@ -210,9 +215,8 @@ class AliengoGymEnv(gym.Env):
         # new_p = np.array(cur_p[0]) + arm_action
         # actuate: 
         # joint_angles = self.calculate_ik(new_p, self.aliengo_orn) # XYZ and angles set to zero
-        # self.joint_angles+=quad_action
-        self.set_joint_angles(action)
-        print(self.get_joint_angles())        
+
+        self.set_joint_angles(self.quad_action + self.joint_angles)
         # step simualator:
         for i in range(self.actionRepeat):
             pybullet.stepSimulation()
@@ -237,14 +241,16 @@ class AliengoGymEnv(gym.Env):
         # js = self.get_joint_angles()
 
         tool_pos = self.get_current_pose()[0] # XYZ, no angles
+        self.obj_vel, _ = pybullet.getBaseVelocity(self.aliengo)
         self.obj_pos, self.obj_orn = pybullet.getBasePositionAndOrientation(self.aliengo)
-        self.obj_pos = (2.0,0,0)
-        objects_pos = self.obj_pos       
-        goal_pos = self.obj_pos
-
-        self.observation = np.array(np.concatenate((tool_pos, objects_pos)))
-        self.achieved_goal = np.array(np.concatenate((objects_pos, tool_pos)))
-        self.desired_goal = np.array(goal_pos)
+        # self.obj_pos = (2.0, 0, 0.38)
+        objects = np.concatenate((self.obj_vel, [self.obj_pos[2]]))
+        goal = (0.45, 0, 0., 0.34)
+        # print(self.obj_pos[2])
+        self.observation = np.array(np.concatenate((self.obj_vel, [self.obj_pos[2]], self.joint_angles + self.quad_action)))
+        # self.observation = np.array(np.concatenate((self.obj_vel, self.obj_pos, self.obj_orn, self.joint_angles + self.quad_action)))
+        self.achieved_goal = np.array(np.concatenate((objects, tool_pos)))
+        self.desired_goal = np.array(goal)
 
 
     def my_task_done(self):
@@ -256,9 +262,9 @@ class AliengoGymEnv(gym.Env):
     def compute_reward(self, achieved_goal, desired_goal, info):
         reward = np.zeros(1)
  
-        grip_pos = achieved_goal[-3:]
+        # grip_pos = achieved_goal[-3:]
             
-        self.target_dist = goal_distance(grip_pos, desired_goal)
+        self.target_dist = goal_distance(achieved_goal[0:4], desired_goal)
         # print(grip_pos, desired_goal, self.target_dist)
 
         # check approach velocity:
@@ -271,10 +277,13 @@ class AliengoGymEnv(gym.Env):
         reward += -self.target_dist * 10
 
         # task 0: reach object:
-        if self.target_dist < self.learning_param:# and approach_velocity < 0.05:
+        if self.target_dist < 0.0005 * self.learning_param:# and approach_velocity < 0.05:
             self.terminated = True
             # print('Successful!')
-
+        # if self.obj_pos[2]<0.2:
+        #     reward += -1000
+        #     self.terminated = True
+        # reward += -0.005 * np.linalg.norm(self.quad_action)
         # penalize if it tries to go lower than desk / platform collision:
         # if grip_trans[1] < self.desired_goal[1]-0.08: # lower than position of object!
             # reward[i] += -1

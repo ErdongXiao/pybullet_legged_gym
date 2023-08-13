@@ -31,28 +31,30 @@ class ActorCritic(nn.Module):
         super(ActorCritic, self).__init__()
         # action mean range -1 to 1
         self.actor =  nn.Sequential(
-                nn.Linear(state_dim, emb_size),
+                nn.Linear(state_dim, emb_size*4),
                 # nn.Tanh(),
                 nn.ELU(),
-                nn.Linear(emb_size, emb_size),
+                nn.Linear(emb_size*4, emb_size*2),
                 # nn.Tanh(),
                 nn.ELU(),
-                # nn.Linear(emb_size, emb_size),
+                nn.Linear(emb_size*2, emb_size),
+                nn.ELU(),
                 # nn.Tanh(),
                 nn.Linear(emb_size, action_dim),
-                # nn.Tanh()
-                nn.ELU()
+                nn.Tanh()
+                # nn.Sigmoid()
                 )
         # critic
         self.critic = nn.Sequential(
-                nn.Linear(state_dim, emb_size),
+                nn.Linear(state_dim, emb_size*4),
                 # nn.Tanh(),
                 nn.ELU(),
-                nn.Linear(emb_size, emb_size),
+                nn.Linear(emb_size*4, emb_size*2),
                 # nn.Tanh(),
                 nn.ELU(),
-                # nn.Linear(emb_size, emb_size),
+                nn.Linear(emb_size*2, emb_size),
                 # nn.Tanh(),
+                nn.ELU(),
                 nn.Linear(emb_size, 1)
                 )
         self.action_var = torch.full((action_dim,), action_std*action_std).to(self.device)
@@ -122,7 +124,7 @@ class PPO:
             rewards.insert(0, discounted_reward)
         
         # Normalizing the rewards:
-        rewards = torch.tensor(rewards).to(self.device)
+        rewards = torch.tensor(np.array(rewards)).to(self.device)
         rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-5)
         rewards = rewards.float().squeeze()
         
