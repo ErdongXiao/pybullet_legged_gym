@@ -9,7 +9,8 @@ import inspect
 # currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 # parentdir = os.path.dirname(currentdir)
 # os.sys.path.insert(0, parentdir)
-
+import pickle as pkl
+obs = {"joint_angles":[], "joint_velocity":[]}
 from absl import app
 from absl import flags
 import scipy.interpolate
@@ -35,7 +36,7 @@ from mpc_controller import arcdog_sim as robot_sim
 FLAGS = flags.FLAGS
 
 
-_NUM_SIMULATION_ITERATION_STEPS = 300
+_NUM_SIMULATION_ITERATION_STEPS = 30
 
 
 _STANCE_DURATION_SECONDS = [
@@ -69,7 +70,7 @@ _STANCE_DURATION_SECONDS = [
 # Trotting
 _DUTY_FACTOR = [0.6] * 4
 _INIT_PHASE_FULL_CYCLE = [0.9, 0, 0, 0.9]
-_MAX_TIME_SECONDS = 50
+_MAX_TIME_SECONDS = 10
 
 _INIT_LEG_STATE = (
     gait_generator_lib.LegState.SWING,
@@ -87,11 +88,11 @@ def _generate_example_linear_angular_speed(t):
   vy = 0.2 * robot_sim.MPC_VELOCITY_MULTIPLIER
   wz = 0.8 * robot_sim.MPC_VELOCITY_MULTIPLIER
   
-  time_points = (0, 5, 10, 15, 20, 25,30)
-  speed_points = ((0, 0, 0, 0), (vx, 0, 0, 0), (0, 0, 0, 0), (vx, 0, 0, 0), (0, 0, 0, 0),
-                  (vx, 0, 0, 0), (0, 0, 0, 0))
-  # time_points = (0, 10)
-  # speed_points = ((0, 0, 0, 0), (0.4, 0, 0, 0))
+  # time_points = (0, 5, 10, 15, 20, 25,30)
+  # speed_points = ((0, 0, 0, 0), (vx, 0, 0, 0), (0, 0, 0, 0), (vx, 0, 0, 0), (0, 0, 0, 0),
+  #                 (vx, 0, 0, 0), (0, 0, 0, 0))
+  time_points = (0, 5)
+  speed_points = ((0, 0, 0, 0), (0.6, 0, 0, 0))
 
   speed = scipy.interpolate.interp1d(
       time_points,
@@ -245,15 +246,21 @@ def _run_example(max_time=_MAX_TIME_SECONDS):
     # Needed before every call to get_action().
     controller.update()
     hybrid_action, info = controller.get_action()
-    
+    robot_state = robot.GetPDObservation()
+    obs["joint_angles"] += [robot_state[0]]
+    obs["joint_velocity"] += [robot_state[1]]
     robot.Step(hybrid_action)
-    
+
+
     if record_video:
-      p.configureDebugVisualizer(p.COV_ENABLE_SINGLE_STEP_RENDERING,1)
+      p.configureDebugVisualizer(p.COV_ENABLE_SINGLE_STEP_RENDERING, 1)
 
     time.sleep(1/500)
     current_time = robot.GetTimeSinceReset()
     p.submitProfileTiming()
+  # f = open("mpc_obs.pkl", "wb")
+  # data = pkl.dump(obs, f, -1)
+  # f.close()
   #p.stopStateLogging(logId)
   #while p.isConnected():
   #  time.sleep(0.1)

@@ -101,7 +101,7 @@ class AliengoGymEnv(gym.Env):
 
         self.name = 'AliengoGymEnv'
         # self.simulatedGripper = simulatedGripper
-        self.action_dim = 6
+        self.action_dim = 12
         self.stepCounter = 0
         self.maxSteps = maxSteps
         self.terminated = False
@@ -139,10 +139,10 @@ class AliengoGymEnv(gym.Env):
         )
 
     def get_joint_angles(self):
-        j = pybullet.getJointStates(self.aliengo, [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16])
-        joints = [i[0] for i in j]
+        j = pybullet.getJointStates(self.aliengo, [1,2,3,4,5,6,7,8,9,10,11,12])
+        joints_vel = [i[1] for i in j]
 
-        return joints
+        return joints_vel
     
 
     def check_collisions(self):
@@ -203,7 +203,7 @@ class AliengoGymEnv(gym.Env):
     
     
     def step(self, action):
-        action = np.concatenate((np.array(action)[0:3]*np.array([0.01, 0.6, 1.2]), np.array(action)[3:6]*np.array([0.01, 0.6, 1.2]), np.array(action)[3:6]*np.array([0.01, 0.6, 1.2]), np.array(action)[0:3]*np.array([0.01, 0.6, 1.2])))
+        # action = np.concatenate((np.array(action)[0:3]*np.array([0.01, 0.6, 1.2]), np.array(action)[3:6]*np.array([0.01, 0.6, 1.2]), np.array(action)[3:6]*np.array([0.01, 0.6, 1.2]), np.array(action)[0:3]*np.array([0.01, 0.6, 1.2])))
         # quad_action = 0.025 * np.array(list(action)+list(action)[3:6]+list(action)[0:3]).astype(float)
         self.quad_action = 0.22 * action.astype(float)
         # arm_action = 0.1 * action[0:self.action_dim-1].astype(float) # dX, dY, dZ - range: [-1,1]
@@ -241,14 +241,22 @@ class AliengoGymEnv(gym.Env):
         # js = self.get_joint_angles()
 
         tool_pos = self.get_current_pose()[0] # XYZ, no angles
-        self.obj_vel, _ = pybullet.getBaseVelocity(self.aliengo)
+        self.obj_vel, self.obj_ang_vel = pybullet.getBaseVelocity(self.aliengo)
         self.obj_pos, self.obj_orn = pybullet.getBasePositionAndOrientation(self.aliengo)
         # self.obj_pos = (2.0, 0, 0.38)
         objects = np.concatenate((self.obj_vel, [self.obj_pos[2]]))
         goal = (0.45, 0, 0., 0.34)
         # print(self.obj_pos[2])
-        self.observation = np.array(np.concatenate((self.obj_vel, [self.obj_pos[2]], self.joint_angles + self.quad_action)))
+        # self.observation = np.array(np.concatenate((self.obj_vel, [self.obj_pos[2]], self.joint_angles + self.quad_action, [0.]*33)))
         # self.observation = np.array(np.concatenate((self.obj_vel, self.obj_pos, self.obj_orn, self.joint_angles + self.quad_action)))
+        self.observation = np.array(np.concatenate((self.obj_ang_vel, 
+                                                    np.array([0., 0., -0.98]),
+                                                    np.array(goal[0:3]),
+                                                    self.quad_action, 
+                                                    self.get_joint_angles(),
+                                                    self.quad_action,
+                                                    np.array([1, 0., 0, 1.]))
+                                                    ))
         self.achieved_goal = np.array(np.concatenate((objects, tool_pos)))
         self.desired_goal = np.array(goal)
 
